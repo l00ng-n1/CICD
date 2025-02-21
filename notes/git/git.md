@@ -588,6 +588,224 @@ touch f1.txt
 git add f1.txt
 
 #查看暂存区文件
+git status
+git ls-files
+
+#从暂存区删除
+git rm --cached f1.txt
+# 或
+git restore --staged f1.txt
+
+git status
 git ls-files
 ```
 
+### 查看暂存区的文件内容
+
+```shell
+git ls-files -s
+
+git cat-file -t 575195c359538106791a01aa92be280e6cd6db22
+
+git cat-file -p 575195c359538106791a01aa92be280e6cd6db22
+```
+
+### 利用暂存区恢复误删除的工作区文件
+
+```shell
+touch test.txt
+git add .
+
+rm -f test.txt 
+
+#从暂存区复制文件到工作目录，两种方式
+git restore test.txt
+git checkout test.txt
+```
+
+### 同时删除工作区和暂存区
+
+```shell
+touch f2.txt
+git add .
+git ls-files
+ls
+
+#同时删除工作区和暂存区文件
+git rm -f f2.txt
+
+git ls-files
+ls
+```
+
+### 回滚工作区的文件为暂存区中版本
+
+```shell
+echo v1 > f1.txt
+
+git add .
+
+echo v2 > f1.txt
+
+#回滚工作区的文件为暂存区中版本
+git checkout -- f1.txt
+```
+
+### 回滚至指定提交的版本
+
+#### git reset
+
+![image-20250221191844750](pic/image-20250221191844750.png)
+
+```shell
+--soft  #工作目录和暂存区都不会被改变，只是本地仓库中的文件回滚到指定的版本，仅移动HEAD和master指针的指向，不会重置暂存区或工作区
+--mixed #默认选项。回滚暂存区和本地仓库，但工作目录不受影响
+--hard  #本地仓库,暂存区和工作目录都回滚到指定的提交,该选项非常危险
+```
+
+```shell
+cat f1.txt
+v1
+
+git add .
+git commit -m v1
+
+echo v2 > f1.txt
+git add .
+git commit -m v2
+
+# 回退1个版本
+git reset --hard HEAD^
+cat f1.txt
+v1
+
+echo v2 > f1.txt
+git add .
+git commit -m v2
+
+echo v3 > f1.txt
+git add .
+git commit -m v3
+
+#查看commitid
+git log 
+
+# 回滚至指定版本
+git reset --hard commitid
+```
+
+#### git revert
+
+如果我们修改了某些内容，已经commit到本地仓库，并且push到远程仓库了，这种情况下想把本地和 远程仓库都回退到某个版本，该怎么做呢？
+
+前面用git reset只是在本地仓库中回退版本，而远程仓库的版本不会变化，这样，即使本地reset了，但 如果再次git pull，那么，远程仓库的内容又会和本地之前版本的内容进行merge，造成回退失败。
+
+git revert用于撤销某次操作，此次操作之前和之后的commit和history都 会保留，即用一个新提交来消除一个历史提交所做的任何修改。evert之后你的本地代码会回滚到指定的历史版本，然后再git push。
+
+将要回退到的版本当成一个新版本加入到链中，再push
+
+```shell
+git revert HEAD            #撤销前一次commit,会交互式打开文本编辑器提示输入提交信息
+git revert HEAD --no-edit  #非交互式撤销前一次提交
+git revert HEAD^           #撤销前前一次commit
+git revert <commitid> #撤销指定的版本，撤销也会作为一次提交进行保存
+```
+
+### 创建分支和合并分支
+
+```shell
+# 查看分支
+git branch
+
+#只创建分支不切换
+git branch dev
+#切换分支
+git checkout  dev
+
+#创建并切换新分支dev
+git checkout -b dev
+
+# 查看版本链
+git log  --pretty --oneline --graph --all
+
+# 切换至master分支
+git checkout master
+# 将dev合并至下载所在分支
+git merge dev -m "merge dev to master"
+
+# 合并时出现冲突，需要自己手动解决或取消合并
+# 取消合并
+git merge --abort
+# 手动解决冲突后
+git commit -am 'merge master'
+```
+
+### 修改分支名称
+
+```shell
+git checkout dev
+
+git branch -M devel
+```
+
+### tag
+
+```shell
+echo v1.0 > a.txt
+git add .
+git commit -m v1.0
+git tag v1.0
+
+echo v2.0 > a.txt
+git add .
+git commit -m v2.0
+git tag v2.0
+
+# 查看tags
+git tag
+git tag -l
+
+# 利用标签回滚
+git reset --hard v1.0
+
+#指定commit ID创建标签
+git tag -a "v1.0" <Commit ID> -m "正式版本1.0"
+ 
+#同步所有标签到远程仓库
+git push origin --tags
+```
+
+### 本地代码提交给公有云仓库
+
+公有云仓库新建仓库时,选择不初始化仓库
+
+```shell
+git remote add origin https://gitee.com/xxx/myapp.git
+
+
+git push -u origin main:master
+
+git remote
+
+git remote -v
+
+git remote remove origin
+```
+
+免密码登录
+
+```shell
+git remote add origin https://用户名:密码@gitee.com/xxx/meta-project.git
+
+#生成公钥和私钥(默认放在 ~/.ssh目录下，id_rsa.pub公钥、id_rsa私钥）
+ssh-keygen
+
+#拷贝公钥的内容，并设置到gitee或github中
+cat id_rsa.pub
+#在git本地中配置ssh地址
+git remote add origin git@gitee.com:lbtooth/meta-project.git
+#以后使用以下即可
+git push origin master
+```
+
+# 私有软件仓库 GitLab
