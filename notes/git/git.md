@@ -514,6 +514,80 @@ vim .gitignore #定义忽略文件，即不放在仓库的文件
 # 初始化
 git init
 
+#设置git，配置git的基本信息
+#选项--system 表示针对所有用户的配置,保存在/etc/gitconfig文件中
+#选项--global 表示当前用户环境,保存在~/.gitconfig文件中,推荐使用
+#选项--local  表示只针对当前目录(项目)的配置,保存在当前目录的.git/config文件中，此为默认值，可省略
+#优先级:local > global > system
 
+ #用户名，另外还可以使用author.name标记作者，以及使用committer.name标记提交者
+git config --global user.name xx
+ #用户的邮箱，还可以使用author.email标记作者邮箱和使用committer.email标记提交者邮箱
+git config --global user.email root@xxx.com
+
+#配置git默认使用的文本编辑器,也可由环境变量GIT_EDITOR指定，且此变量的优先级更高
+git config --global core.editor vim
+
+ #查看system,global和local的配置
+git config -l
+cat .gitconfig
+git config -l --global
+
+#交互编辑配置
+git config --global -e
+
+#删除配置
+git config --unset --system user.name
+```
+
+### 添加暂存区并提交数据
+
+```shell
+touch a.txt
+
+# 添加暂存区
+git add a.txt
+
+# 提交数据
+git commit -m 'add a.txt'
+
+# 查看仓库状态
+# 工作区和暂存区数据不一致,会显示红色的提示
+# 暂存区和本地仓库数据不一致,会显示绿色的提示
+git status
+```
+
+### 设置忽略文件
+
+配置.gitignore文件让 Git 不再管理当前目录下的某些文件。 
+
+生产中有如下几类文件可能需要忽略
+
+*   程序运行时产生的临时文件 
+*   程序连接数据库这一类的配置文件 
+*   程序本地开发使用的图片文件 
+*   其它不想被共享的文件
+
+```
+#cat .gitignore 
+/bin
+/target
+.classpath
+.project
+.settings
+*.h
+!test.h
+*.py[c|x]
+```
+
+### 将文件加入暂存区再取消添加
+
+```shell
+touch f1.txt
+
+git add f1.txt
+
+#查看暂存区文件
+git ls-files
 ```
 
