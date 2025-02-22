@@ -809,3 +809,196 @@ git push origin master
 ```
 
 # 私有软件仓库 GitLab
+
+## GitLab 架构
+
+![image-20250222102355172](pic/image-20250222102355172.png)
+
+Gitlab的服务构成
+
+*   Nginx：静态web服务器 
+*   GitLab shell：用于处理基于ssh会话的Git命令和修改authorized keys列表 
+*   gitlab-workhorse：轻量级的反向代理服务器,它旨在充当智能反向代理，以帮助整个 GitLab 加速  
+*   unicorn：An HTTP server for Rack applications, GitLab Rails应用是托管在这个服务器上面的 
+*   Gitaly：Git RPC service for handing all Git calls made by GitLab 
+*   Puma (GitLab Rails)：处理发往Web接口和API的请求 
+*   postgresql：数据库 
+*   redis：缓存数据库 
+*   sidekiq：用于在后台执行队列任务（异步执行) 
+*   GitLab Exporter：GitLab指标暴露器 
+*   Node Exporter：节点指标暴露器 
+*   GitLab self-monitoring的多个组件：Prometheus、Alertmanager、Grafana、Sentry和Jaeger 
+*   Inbound emails（SMPT）：接收用于更新issue的邮件 
+*   Outbound email (SMTP)：向用户发送邮件通知 LDAP 
+*   Authentication：LDAP认证集成 
+*   MinIO：对象存储服务 
+*   Registry：容器注册表，支持Image的push和pull操作 
+*   Runner：执行GitLab的CI/CD作业
+
+**Omnibus GitLab**
+
+由于Gitlab 组件众多,各个组件的分别管理配置过于复杂,所以官方提供了 Omnibus GitLab 项目实现方便 的管理
+
+Omnibus GitLab是基于Chef的应用编排工具，它基于Chef的cookbooks和recipes等组件自动化编排 GitLab的各组件，避免了用户复杂的配置过程
+
+管理各组件使用统一命令为gitlab-ctl，例如gitlab-ctl reconfigure或gitlab-ctl restart等能统—执行各组 件的重新配置及重启操作
+
+此外还有一些各组件专用的命令，如:gitlab-backup,gitlab-pgsql,gitlab-rails和gitlab-rake等
+
+提供统一配置模板文件, 用于为GitLab中的每个组件提供配置信息
+
+在配置模板文件中对于每个组件配置参数格式为: ['']= 
+
+## GitLab 安装
+
+[Install GitLab in a Docker container | GitLab Docs](https://docs.gitlab.com/install/docker/)
+
+
+
+### 安装包下载安装
+
+GitLab 有两个版本：EE商业版和CE社区版，以下使用CE版
+
+硬件配置要求较高： 
+
+测试环境：内存4G以上，新版gitlab-ce_17.3.1建议8G以上 
+
+生产环境：建议CPU2C以上，内存8G以上，磁盘10G以上配置，和用户数有关 
+
+注意:如果内存较低,可以会导致Gitlab有些服务无法启动,建议4G以上内存
+
+从GitLab 12.1 开始Linux包安装不再支持MySQL,只支持PostgreSQL 
+
+**GitLab-CE 安装包官方下载地址：**
+
+[gitlab/gitlab-ce - Packages · packages.gitlab.com](https://packages.gitlab.com/gitlab/gitlab-ce)
+
+```shell
+wget https://packages.gitlab.com/gitlab/gitlab-ce/packages/ubuntu/noble/gitlab-ce_17.9.0-ce.0_amd64.deb/download.deb
+
+apt install ./download.deb
+dpkg -i ./download.deb
+```
+
+### 修改 GitLab 配置
+
+```shell
+/etc/gitlab #配置文件目录，重要
+/var/opt/gitlab #数据目录,源代码就存放在此目录,重要
+/var/log/gitlab #日志目录 
+/run/gitlab #运行目录,存放很多的数据库文件
+/opt/gitlab #安装目录
+```
+
+修改配置
+
+```shell
+vim /etc/gitlab/gitlab.rb
+external_url 'http://gitlab.wang.org'   #修改此行
+```
+
+### 初始化和启动服务
+
+```shell
+#每次修改完配置文件都需要执行此操作
+gitlab-ctl reconfigure
+
+# 查看各个组件状态
+gitlab-ctl status
+
+# 初始化的密码
+cat /etc/gitlab/initial_root_password
+```
+
+### Gitlab的常用命令
+
+```shell
+gitlab-ctl  
+gitlab-ctl check-config #检查配置
+gitlab-ctl show-config  #查看配置
+gitlab-ctl reconfigure  #修改过配置后需要执行重新配置
+gitlab-ctl stop         #停止gitlab
+gitlab-ctl start        #启动gitlab
+gitlab-ctl restart      #重启gitlab
+gitlab-ctl status       #查看组件运行状态
+gitlab-ctl tail         #查看所有日志
+gitlab-ctl tail nginx   #查看某个组件的日志
+gitlab-ctl service-list #列出服务
+
+gitlab-rails #用于启动控制台进行特殊操作，如修改管理员密码、打开数据库控制台( gitlab-rails dbconsole)等
+gitlab-psql #数据库命令行
+gitlab-rake #数据备份恢复等数据操作
+```
+
+## GitLab 的数据备份和恢复
+
+```shell
+# 备份相关配置文件
+gitlab-ctl backup-etc
+
+ls /etc/gitlab/config_backup/
+
+tar tvf /etc/gitlab/config_backup/gitlab_config_1740216167_2025_02_22.tar
+```
+
+备份数据
+
+```shell
+gitlab-backup create
+
+# 默认备份保存在下面目录
+ll /var/opt/gitlab/backups/
+```
+
+执行恢复
+
+```shell
+# 恢复前先停止两个服务
+gitlab-ctl stop puma
+gitlab-ctl stop sidekiq
+
+#恢复时指定备份文件的时间部分，不需要指定文件的全名
+gitlab-backup restore BACKUP=备份文件名的时间部分_Gitlab版本
+gitlab-backup restore BACKUP=1740216291_2025_02_22_17.9.0
+
+gitlab-ctl reconfigure
+gitlab-ctl restart
+```
+
+## GitLab 迁移和升级
+
+在生产中升级往往伴随着服务器的迁移,比如从本地机房迁移到云环境中,而实现升级
+
+迁移流程
+
+*   在原GitLab主机上备份配置文件和数据 
+*   在目标主机上安装相同的版本的GitLab软件 
+*   还原配置和数据 
+*   本质上就是备份和恢复的过程
+
+升级流程
+
+*   如果新主机，需要先安装原版本，并还原配置和数据 
+
+*   不能直接跳过中间的版本直接升级,选择最近的大版本进行升级 
+
+    比如:12.1想升级到13.0,先升级到12.X最高版,再升级到13.0 
+
+*   下载新版本的安装包,直接安装包 
+*   安装包时可能会提示出错,原因是版本升级后有些配置项会过时,根据提示修改配置即可 
+*   重新配置: gitlab-ctl reconfigure
+*   重启服务: gitlab-ctl restart 
+
+## 重置 GitLab 忘记的密码
+
+```shell
+gitlab-rails console -e production
+
+irb(main):001:0> user = User.find_by_username 'root'
+#更改密码并确认密码
+irb(main):002:0> user.password="wang@123"
+irb(main):003:0> user.password_confirmation="wang@123"
+#保存
+irb(main):004:0> user.save
+```
+
