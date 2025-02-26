@@ -540,3 +540,219 @@ vim /etc/ansible/hosts
 
 安装 Ansible 插件
 
+![image-20250226090302023](pic/image-20250226090302023.png)
+
+### 使用 Ansible Ad-Hoc 实现任务
+
+![image-20250226091031764](pic/image-20250226091031764.png)
+
+### 使用 Ansible Playbook 实现任务
+
+```shell
+cat /data/ansible/test.yml
+- hosts: webservers
+  remote_user: root
+  
+  tasks:
+  - name: excute cmd
+    shell:
+     cmd: hostname -I
+    register: result
+    
+  - name: show result
+    debug:
+      msg: "{{ result }}"
+```
+
+![image-20250226091323267](pic/image-20250226091323267.png)
+
+### 使用 Ansible Playbook 基于参数化实现任务测试和生产多套 不同环境的部署
+
+准备两个不同环境的主机清单文件
+
+```
+vim /etc/ansible/hosts_test
+[webservers]
+10.0.0.205
+
+vim /etc/ansible/hosts_product
+[webservers]
+10.0.0.206
+```
+
+创建参数化任务
+
+![image-20250226092046580](pic/image-20250226092046580.png)
+
+![image-20250226092116446](pic/image-20250226092116446.png)
+
+### 使用 Ansible Playbook 实现向 Playbook 中传参功能
+
+```yaml
+cat /data/ansible/test.yml
+- hosts: "{{ ansible_hosts }}"
+  #指定ansible 变量，后面在Jenkins中对其赋值，注意：ansible_host是内置保留字，不能使用
+  remote_user: root
+  
+  tasks:
+  - name: excute cmd
+    shell:
+     cmd: hostname -I
+    register: result
+    
+  - name: show result
+    debug:
+      msg: "{{ result }}"
+```
+
+![image-20250226092750145](pic/image-20250226092750145.png)
+
+![image-20250226092813380](pic/image-20250226092813380.png)
+
+
+
+![image-20250226092731158](pic/image-20250226092731158.png)
+
+![image-20250226092931120](pic/image-20250226092931120.png)
+
+## 构建后通知
+
+### 邮件通知
+
+mailer 插件
+
+Email Extension 插件比Mailer插件的功能更加丰富
+
+配置 Jenkins管理员发信件人邮
+
+![image-20250226094219152](pic/image-20250226094219152.png)
+
+![image-20250226094441010](pic/image-20250226094441010.png)
+
+构建配置
+
+![image-20250226094604454](pic/image-20250226094604454.png)
+
+连续成功不会发送
+
+失败后第一次成功发送邮件
+
+### 钉钉通知
+
+DingTalk 插件
+
+### 微信通知
+
+Qy Wechat Notification 插件
+
+## 自动化构建
+
+*   周期性定时构建 
+*   Webhook 触发构建
+
+### 定时和 SCM 构建
+
+周期性构建这是—-种基于 cron 类型的构建机制．按照预定义的时间周期性启动作务 
+
+*   定时构建: 按时间周期性的触发构建
+
+*   轮询SCM(Source  Code Management): 
+
+    指的是定期到代码仓库检查代码是否有变更，存在代码变更时就运行pipeline;
+
+Jenkins cron语法遵循Unix cron语法的定义,但在细节上略有差别
+
+```shell
+MINUTE  HOUR DOM MONTH DOW
+MINUTE  Minutes within the hour (0–59)
+HOUR    The hour of the day (0–23)
+DOM     The day of the month (1–31)
+MONTH   The month (1–12)
+DOW     The day of the week (0–7) where 0 and 7 are Sunday.
+# 分，时，日，月，周
+H代表范围内随机一个值
+H(x-y)可以指定范围
+
+H * * * * # 每小时构建
+H/3 * * * * * # 随机点开始，每三分钟后一次
+```
+
+### 构建 Webhook 触发器
+
+构建触发器(webhook)，也称为钩子，实际上是一个HTTP回调，其用于在开发人员向gitlab提交代码后 能够触发jenkins自动执行代码构建操作。
+
+*   触发远程构建: 此方式无需安装插件 
+*   Build when a change is pushed to GitLab. GitLab webhook URL: 需要安装Gitlab插件 
+*   Generic Webhook Trigger :   需要安装 Generic Webhook Trigger Plugin 插件
+
+![image-20250226103603510](pic/image-20250226103603510.png)
+
+```shell
+# 用户生成API token
+1103b016401f9e009948a709f69a18a14d
+```
+
+![image-20250226103738290](pic/image-20250226103738290.png)
+
+```shell
+curl http://admin:<token>@jenkins.loong.com:8080/job/free-webhook/build?token=123456
+```
+
+#### Gitlab配置 Webhook触发远程构建
+
+Gitlab 打开出站请求（外发请求）
+
+![image-20250226104438674](pic/image-20250226104438674.png)
+
+gitlab添加webhook
+
+![image-20250226104707722](pic/image-20250226104707722.png)
+
+#### Gitlab插件
+
+![image-20250226105024281](pic/image-20250226105024281.png)
+
+![image-20250226105117923](pic/image-20250226105117923.png)
+
+![image-20250226105204895](pic/image-20250226105204895.png)
+
+```
+http://jenkins.loong.com:8080/project/free-webhook
+bf8539deca7620d65be84446e273dc80
+```
+
+gitlab配置(项目中的webhook)
+
+![image-20250226110825050](pic/image-20250226110825050.png)
+
+
+
+#### Generic Webhook Trigger
+
+![image-20250226110406728](pic/image-20250226110406728.png)
+
+## 构建前后多个项目关联自动触发任务执行
+
+用于多个 Job 相互关联，需要同行执行多个job的场景,比如:如果job1后希望自动构建job2
+
+![image-20250226112410745](pic/image-20250226112410745.png)
+
+### 指定后面跟着的项目
+
+![image-20250226112441830](pic/image-20250226112441830.png)
+
+![image-20250226112519078](pic/image-20250226112519078.png)
+
+![image-20250226112529678](pic/image-20250226112529678.png)
+
+![image-20250226112539322](pic/image-20250226112539322.png)
+
+### 指定什么项目完成触发此项目
+
+![image-20250226112652875](pic/image-20250226112652875.png)
+
+## 实现容器化的 Docker 任务
+
+![image-20250226113448396](pic/image-20250226113448396.png)
+
+### 实现自由风格任务实现 Docker 镜像制作并运行
