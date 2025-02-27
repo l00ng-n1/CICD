@@ -753,6 +753,126 @@ gitlab配置(项目中的webhook)
 
 ## 实现容器化的 Docker 任务
 
-![image-20250226113448396](pic/image-20250226113448396.png)
+
+
+当前越来越多的组织以容器形式运行应用, 应用交付形式统一为Container Image
+
+交付的Container Image由Registry存储和分发,应用以容器化形式由Docker，Kubernetes进行编排运行
 
 ### 实现自由风格任务实现 Docker 镜像制作并运行
+
+![image-20250226113448396](pic/image-20250226113448396.png)
+
+在目标主机安装 Docker，并且打开远程连接端口，并且信任harbor
+
+```shell
+#在Jenkins主机及应用主机上安装Docker
+apt update && apt -y install docker.io
+
+vim /etc/docker/daemon.json
+{
+ "insecure-registries": ["harbor.loong.com"]                                                  
+}
+
+# 应用主机 放开docker对外端口（可选，对应脚本的docker -H），不做则脚本使用ssh
+vim /lib/systemd/system/docker.service
+ExecStart=/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock -H 10.0.0.206:2375
+# 加上 -H ip:2375
+
+# jenkins加入docker组( Jenkins主机 )
+usermod -aG docker jenkins
+systemctl restart jenkins
+
+# 所有主机
+systemctl daemon-reload 
+systemctl restart docker
+
+# Jenkins主机
+su - jenkins
+docker login harbor.loong.com
+
+# 应用主机
+docker login harbor.loong.com
+
+
+```
+
+Gitlab 准备项目
+
+
+
+shell脚本
+
+```shell
+REGISTRY=harbor.loong.com
+PORT=8888
+
+HOSTS="
+ 10.0.0.205
+ 10.0.0.206                                     
+ "
+
+mvn clean package -Dmaven.test.skip=true
+docker build -t ${REGISTRY}/example/myapp:v$BUILD_ID .
+docker push ${REGISTRY}/example/myapp:v$BUILD_ID
+for i in $HOSTS; do
+    docker -H $i rm -f myapp
+    docker -H $i run -d -p ${PORT}:8888 --restart always --name myapp${REGISTRY}/example/myapp:v$BUILD_ID
+    #ssh root@$i "docker rm -f myapp ; docker  run -d  -p 8888:8888 --name myapp --restart always ${REGISTRY}/example/myapp:v$BUILD_ID"
+    #ssh root@$i docker run  -d  -p ${PORT}:8888 --restart always --name myapp${REGISTRY}/example/myapp:v$BUILD_ID
+done
+```
+
+### 基于 Docker 插件实现自由风格任务实现 Docker 镜像制作
+
+安装插件 docker-build-step
+
+与上述一样的环境配置
+
+系统管理中配置docker
+
+```shell
+unix:///var/run/docker.sock
+```
+
+![image-20250227115439679](pic/image-20250227115439679.png)
+
+在 Jenkins 创建连接 Harbor 的凭证
+
+![image-20250227115642408](pic/image-20250227115642408.png)
+
+**构建步骤1 maven**
+
+![image-20250227115850931](pic/image-20250227115850931.png)
+
+**构建步骤2 选择docker 打镜像**
+
+![image-20250227115739992](pic/image-20250227115739992.png)
+
+![image-20250227120101306](pic/image-20250227120101306.png)
+
+**构建步骤2 推到harbor**
+
+![image-20250227120403413](pic/image-20250227120403413.png)
+
+之后目标主机拉容器（shell）
+
+```shell
+APP=free-docker-plugin
+HARBOR=harbor.loong.com
+
+HOST_LIST="
+ 10.0.0.205
+ 10.0.0.206
+"
+PORT=8888
+
+for host in $HOST_LIST; do
+    #ssh root@$host "docker rm -f $APP ; docker run -d --name $APP -p 80:$PORT $HARBOR/private/$APP:$BUILD_NUMBER"
+    #docker -H $host rm -f $APP
+    #docker -H $host run -d --restart=always --name $APP -p 80:$PORT $HARBOR/private/$APP:$BUILD_NUMBER
+    docker -H ssh://root@$host rm -f $APP
+    docker -H ssh://root@$host run -d --restart=always --name $APP -p 80:$PORT $HARBOR/private/$APP:$BUILD_NUMBER
+done
+```
+
