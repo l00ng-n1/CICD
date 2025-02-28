@@ -534,10 +534,160 @@ pipeline {
 }
 ```
 
+### 变量
+
+
+
 ## 安装Pipeline 插件
 
 ![image-20250227175138263](pic/image-20250227175138263.png)
 
+![image-20250228191156318](pic/image-20250228191156318.png)
+
+![image-20250228191248103](pic/image-20250228191248103.png)
+
+
+
+
+
 ## Pipeline Job
 
-#### 简单 Pipeline Job
+### 简单 Pipeline Job
+
+```groovy
+pipeline {
+    agent any
+
+    stages {
+        stage('clone') {
+            steps {
+                echo 'clone'
+            }
+        }
+        stage('build') {
+            steps {
+                echo 'build'
+            }
+        }
+        stage('test') {
+            steps {
+                echo 'test'
+            }
+        }
+        stage('image') {
+            steps {
+                echo 'image'
+            }
+        }        
+    }
+}
+```
+
+### 自动生成拉取代码的 Pipeline 脚本
+
+jenkins的credential的唯一标识符
+
+```shell
+pipeline {
+    agent any
+	    
+	    environment {
+        codeRepo="git@gitlab.loong.com:group/helloworld-spring-boot.git"
+        credential="gitlab-ssh"
+    }
+    
+    stages {
+        stage('Source') {
+            steps {
+                git branch: 'master', credentialsId: "${credential}", url: "${codeRepo}"
+            }
+        }
+        stage('build') {
+            steps {
+                echo 'build'
+            }
+        }
+        stage('test') {
+            steps {
+                echo 'test'
+            }
+        }
+        stage('image') {
+            steps {
+                echo 'image'
+            }
+        }
+    }
+}
+```
+
+### Pipeline 部署示例
+
+```groovy
+pipeline {
+    agent any
+	    
+	    environment {
+        codeRepo="git@gitlab.loong.com:group/helloworld-spring-boot.git"
+        credential="gitlab-ssh"
+        harborServer='harbor.loong.com'
+        projectName='spring-boot-helloworld'
+        imageUrl="${harborServer}/public/${projectName}"
+        imageTag="${BUILD_ID}"
+        harborUserName="admin"
+        harborPassword="123456"
+    }
+    
+    stages {
+        stage('Source') {
+            steps {
+                git branch: 'master', credentialsId: "${credential}", url: "${codeRepo}"
+            }
+        }
+        stage('test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+        stage('Build') {
+            steps {
+                //sh 'mvn -B -DskipTests clean package'
+                 sh 'mvn clean package -Dmaven.test.skip=true'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build . -t "${imageUrl}:${imageTag}"'
+            }           
+        }
+        stage('Push Docker Image') {
+            steps {
+                //sh "echo ${harborPassword} | docker login -u ${harborUserName} --password-stdin ${harborServer}"
+                sh "docker login -u ${harborUserName} -p ${harborPassword} ${harborServer}"
+                sh "docker push ${imageUrl}:${imageTag}"
+            }   
+        }
+        stage('Run Docker ') {
+            steps {
+                sh 'ssh root@10.0.0.205 "docker rm -f ${projectName} ; docker run --name ${projectName} --restart always -p 80:8888 -d ${imageUrl}:${imageTag}"'
+                sh 'ssh root@10.0.0.206 "docker rm -f ${projectName} ; docker run --name ${projectName} --restart always -p 80:8888 -d ${imageUrl}:${imageTag}"'
+                //sh "docker -H 10.0.0.101 rm -f ${projectName} ; docker -H 10.0.0.101 run --name ${projectName} --restart always -p 80:8888 -d ${imageUrl}:${imageTag}"
+                //sh "docker -H 10.0.0.102 rm -f ${projectName} ; docker -H 10.0.0.102 run --name ${projectName} --restart always -p 80:8888 -d ${imageUrl}:${imageTag}"
+            }   
+        }  		
+    }
+}
+```
+
+
+
+### 通过 Jenkinsfile 文件实现
+
+可以将pipeline的语句写到代码仓库中的 Jenkinsfile 文件,这样更加方便维护
+
+![image-20250228205653766](pic/image-20250228205653766.png)
+
+![image-20250228205829866](pic/image-20250228205829866.png)
+
+![image-20250228205835039](pic/image-20250228205835039.png)
