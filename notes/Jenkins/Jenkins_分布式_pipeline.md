@@ -536,6 +536,276 @@ pipeline {
 
 ### 变量
 
+ Jenkins环境变量可分为内置变量和用户自定义变量两类
+
+pipeline和stage得中用于定义环境变量的指令是environment，但定义位置的不同，也意味着其作用域 的不同
+
+定义在pipeline顶部的环境变量可被其后的各stage所引用
+
+jenkins全局环境变量可被所有的pipeline引用，它们以“env.”为前缀
+
+```shell
+${env.ENV_VAR_NAME}
+$env.ENV_VAR_NAME
+$ENV_VAR_NAME
+${ENV_VAR_NAME}
+#注意：变量引用有时要加双引号引起来，如："${env.<ENV_VAR_NAME>}"
+
+pipeline {
+    agent any    
+    environment {
+        NAME = "wangxiaochun"
+    }
+    stages {
+        stage('declare var') {
+            steps {
+                script {
+                   env.LOGIN=sh(returnStdout: true, script: "who|wc -l")        
+               }
+            }
+        }
+        stage('get var') {
+            steps {
+                echo "NAME=$NAME"            
+                echo "NAME=${NAME}"
+                echo "NAME=${env.NAME}"
+                echo "NAME=$env.NAME"                
+                echo "LOGIN=${LOGIN}"
+            }
+        }
+    }
+}
+```
+
+### 参数化构建
+
+```groovy
+pipeline {
+    agent any
+    parameters {
+        string(defaultValue:"Ops",description: "Enter user role:",name: 'userRole')
+        text(name: 'BIOGRAPHY', defaultValue: '', description: 'Enter some information about the person')
+        booleanParam(name: 'TOGGLE', defaultValue: true, description: 'Toggle this value')
+        choice(name: 'CHOICE', choices: ['One', 'Two', 'Three'], description: 'Pick something')
+        password(name: 'PASSWORD', defaultValue: 'SECRET', description: 'Enter a password')               
+    }
+    
+    stages {
+        stage('listvalues'){
+            steps {
+                echo "User's role = ${params.userRole}"
+            }
+        }
+    }
+}
+```
+
+### 交互输入
+
+交互输入实现确认和取消
+
+```groovy
+pipeline{
+    agent {
+        //指定在linux标签的agent执行任务
+        label 'agent1'   
+    }
+    stages{
+        stage("get code"){
+            steps{
+                input {
+                    message "should we continue?"
+                    ok "Yes，we should."
+                    parameters {
+                        string(name: 'PERSON', defaultValue: '王老师',description: '请输入确认者的身份')
+                    }
+                }
+                echo "经过${PERSON}的检查，该项目没有问题!"
+            }
+        }
+    }
+}
+```
+
+### 条件判断
+
+使用if语句或者try语句,或者when来进行条件的流程控制
+
+#### if
+
+```groovy
+pipeline{
+    agent any
+    stages{
+        stage("test"){
+            steps{
+                script{
+                    result = sh(script: "[ -d hello-world-war ]", returnStatus:true)
+                    if(result == 0){
+                        sh 'rm -rf hello-world-war'
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+#### when
+
+```groovy
+pipeline{
+    agent any
+    stages{
+        stage("test"){
+            steps{
+                when {
+                    //如果 beforeInput 为 true，则会先评估 when 条件。在 when 条件为 true时，才会进入到 input 阶段
+                    beforeInput true
+                    branch 'main'
+                }
+                input {
+                    message "Deploy to production?"
+                    id "deploy"
+                }
+            }
+        }
+    }
+}
+```
+
+### 并行
+
+```groovy
+pipeline {
+    agent any
+    stages {
+        stage( 'Deploy') {
+            parallel {
+                stage('deploy_proxy'){
+                    steps {
+                        echo "部署反向代理服务"
+                    }
+                }
+                stage('deploy app1') {
+                    steps {
+                        echo "部署deploy_app1应用"
+                    }
+                }
+                stage ('deploy app2'){
+                    stages {
+                        stage ('delete container') {
+                            steps {
+                                 echo "删除旧容器"
+                            }
+                        }
+                        stage('start container') {
+                            steps {
+                                echo "启动新容器"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+![image-20250301104619515](pic/image-20250301104619515.png)
+
+### 触发器
+
+```shell
+pipeline {
+    agent any
+    tools {
+        maven 'maven-3.8.7'
+    }
+    triggers {
+        gitlab(triggerOnPush: true,
+            acceptMergeRequestOnSuccess: true,
+            //triggerOnMergeRequest: true,
+            branchFilterType: 'All',
+            secretToken: 'xxxx')
+        }
+    parameters {
+        booleanParam(name: "PUSH", defaultValue: true)
+        }
+    environment {
+        GitRepo="http://gitlab.wang.org/devops/spring-boot-helloWorld.git"
+        credential="gitlab-wang-password"
+        HarborServer='harbor.wang.org'        
+        ImageUrl="sre/spring-boot-helloworld"
+        ImageTag="latest"
+        }
+    stages {
+        stage('Source'){
+            steps { 
+                git branch: 'main', credentialsId: "${credential}", url: "${GitRepo}"
+                //git branch: 'main', url: "${GitRepo}"
+            }
+        }
+    }
+}
+```
+
+### 构建后操作
+
+通知
+
+```groovy
+pipeline {
+    agent any
+    parameters {
+        booleanParam(name:'pushImage', defaultValue: 'true', description: 'Push Image to Harbor?')
+    }    
+    tools {
+        maven 'maven-3.8.7'
+    }
+    stages {
+        stage('Source') {
+            steps {
+                echo "source"
+            }
+        }
+        stage('Build') {
+            steps {
+                echo "Build"
+            }
+        }
+        stage('Build Docker Image') {
+            steps {
+                echo "Build Docker image"
+            }           
+        }
+        stage('Push Docker Image') {
+           agent any
+           when {
+                 expression { params.pushImage }
+                //expression { "${params.pushImage}" == 'true' }
+            }
+            steps {
+            	echo "Push"
+            }   
+        }
+        stage('Run Docker ') {
+            steps {
+				echo "run docker"
+				//sh 'false'
+            }   
+        }
+    }
+    post {
+        always {
+            mail to: 'root@wangxiaochun.com',
+            subject: "Status of pipeline: ${currentBuild.fullDisplayName}",
+            body: "${env.BUILD_URL} has result ${currentBuild.result}"
+        }
+    }  
+}
+```
+
 
 
 ## 安装Pipeline 插件
@@ -634,8 +904,8 @@ pipeline {
         projectName='spring-boot-helloworld'
         imageUrl="${harborServer}/public/${projectName}"
         imageTag="${BUILD_ID}"
-        harborUserName="admin"
-        harborPassword="123456"
+        #harborUserName="admin"
+        #harborPassword="123456"
     }
     
     stages {
@@ -663,9 +933,16 @@ pipeline {
         }
         stage('Push Docker Image') {
             steps {
-                //sh "echo ${harborPassword} | docker login -u ${harborUserName} --password-stdin ${harborServer}"
-                sh "docker login -u ${harborUserName} -p ${harborPassword} ${harborServer}"
-                sh "docker push ${imageUrl}:${imageTag}"
+                withCredentials([usernamePassword(credentialsId: 'harbor-admin', \
+                        usernameVariable: 'harborUserName',passwordVariable: 'harborPassword')]) {
+                    //sh "echo ${harborPassword} | docker login -u ${env.harborUserName} --password-stdin ${harborServer}"
+                    // sh "docker login -u ${env.harborUserName} -p ${harborPassword} ${harborServer}"
+                    sh "echo ${harborPassword} | docker login -u ${env.harborUserName} --password-stdin ${harborServer}"
+                    sh "docker push ${imageUrl}:${imageTag}"
+                    
+                    echo "username=${env.harborUserName}"
+                    echo "password=${harborPassword}"
+                }
             }   
         }
         stage('Run Docker ') {
@@ -691,3 +968,27 @@ pipeline {
 ![image-20250228205829866](pic/image-20250228205829866.png)
 
 ![image-20250228205835039](pic/image-20250228205835039.png)
+
+# Jenkins 权限管理
+
+![image-20250301105358819](pic/image-20250301105358819.png)
+
+更改认证方式
+
+![image-20250301105434153](pic/image-20250301105434153.png)
+
+设置角色，添加用户到角色
+
+![image-20250301105514248](pic/image-20250301105514248.png)
+
+# Jenkins 视图
+
+对任务进行归档
+
+![image-20250301105610263](pic/image-20250301105610263.png)
+
+build pipeline插件
+
+![image-20250301105801489](pic/image-20250301105801489.png)
+
+![image-20250301105907743](pic/image-20250301105907743.png)
